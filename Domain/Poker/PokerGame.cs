@@ -1,18 +1,12 @@
-﻿namespace CassinoDemo.Poker;
+﻿using Aidan.Core.Patterns;
 
-public enum GameLifeCycleStage
-{
-    NotStarted,
-    InProgress,
-    Ended
-}
+namespace Domain.Poker;
 
 public class PokerGame
 {
     public Guid Id { get; }
-
-    private Table Table { get; }
-    private Dealer Dealer { get; }
+    public Table Table { get; }
+    public Dealer Dealer { get; }
         
     public PokerGame(
         Guid id,
@@ -24,7 +18,24 @@ public class PokerGame
         Dealer = dealer;
     }
 
-    public IReadOnlyList<Player> Players => Table.Seats;
+    public IReadOnlyList<Player> Players => Table.Players;
+
+    public static PokerGameBuilder Create()
+    {
+        return new PokerGameBuilder();
+    }
+
+    public bool IsPlayerSeated(Guid playerId)
+    {
+        var player = FindPlayer(playerId);
+
+        if(player is null)
+        {
+            return false;
+        }
+
+        return Table.IsPlayerSeated(player);
+    }
 
     /*
      * Behavior
@@ -35,7 +46,19 @@ public class PokerGame
 
     }
 
-    public void AddPlayer(Guid id, string name, decimal bankroll = 0)
+    public void StartRound()
+    {
+        Dealer.StartRound(Table);
+    }
+
+    public void AbortRound()
+    {
+        Dealer.AbortRound(Table);
+    }
+
+    /* Player actions */
+
+    public void Join(Guid id, int seat, string name, decimal bankroll = 0)
     {
         var player = Player.CreateBuilder()
             .WithId(id)
@@ -43,31 +66,43 @@ public class PokerGame
             .WithBankrollBalance(bankroll)
             .Build();
 
-        Dealer.AddPlayer(player, Table);
+        Dealer.AcceptPlayerJoin(player, Table);
+        Table.SitPlayer(seat, player);
     }
 
-    public void RemovePlayer(Guid playerId)
+    public QuitResult Quit(Guid playerId)
     {
-        Dealer.RemovePlayer(GetPlayer(playerId), Table);
+        var player = GetPlayer(playerId);
+
+        Dealer.AcceptPlayerQuit(player, Table);
+        Table.StandPlayer(player);
+
+        return QuitResult.Create()
+            .WithPlayer(player)
+            .WithBankrollBalance(player.BankrollBalance)
+            .Build();
     }
 
-    public void StartRound()
+    public void Rebuy(Guid playerId, decimal amount)
     {
-        Dealer.StartRound(Table);
+        Dealer.AcceptPlayerRebuy(GetPlayer(playerId), Table, amount);
     }
 
-    public void EndRound()
-    {
-
-    }
-
-    /*
-     * Player actions
-     */
+    /* Player betting actions */
 
     public void Check(Guid playerId)
     {
         Dealer.AcceptPlayerCheck(GetPlayer(playerId), Table);
+    }
+
+    public void Bet(Guid playerId, decimal amount)
+    {
+        Dealer.AcceptPlayerBet(GetPlayer(playerId), Table, amount);
+    }
+
+    public void Fold(Guid playerId)
+    {
+        Dealer.AcceptPlayerFold(GetPlayer(playerId), Table);
     }
 
     public void Call(Guid playerId)
@@ -75,13 +110,21 @@ public class PokerGame
         Dealer.AcceptPlayerCall(GetPlayer(playerId), Table);
     }
 
-    /*
-     * Private helper methods
-     */
-
-    private Player GetPlayer(Guid playerId)
+    public void Raise(Guid playerId, decimal amount)
     {
-        var player = Players.FirstOrDefault(p => p.Id == playerId);
+        Dealer.AcceptPlayerRaise(GetPlayer(playerId), Table, amount);
+    }
+
+    /* Helpers */
+
+    public Player? FindPlayer(Guid playerId)
+    {
+        return Table.FindPlayer(playerId);
+    }
+
+    public Player GetPlayer(Guid playerId)
+    {
+        var player = Table.FindPlayer(playerId);
 
         if(player is null)
         {
@@ -91,4 +134,55 @@ public class PokerGame
         return player;
     }
         
+}
+
+public class PokerGameBuilder : IBuilder<PokerGame>
+{
+    private Guid Id { get; set; }
+    private Table? Table { get; set; }
+    private Dealer? Dealer { get; set; }
+
+    public PokerGameBuilder()
+    {
+        Id = Guid.NewGuid();
+    }
+
+    public PokerGameBuilder WithId(Guid id)
+    {
+        Id = id;
+        return this;
+    }
+
+    public PokerGameBuilder WithTable(Table table)
+    {
+        Table = table;
+        return this;
+    }
+
+    public PokerGameBuilder WithDealer(Dealer dealer)
+    {
+        Dealer = dealer;
+        return this;
+    }
+
+    public PokerGame Build()
+    {
+        if (Id == Guid.Empty)
+        {
+            throw new InvalidOperationException("Id is required");
+        }
+
+        if (Table is null)
+        {
+            throw new InvalidOperationException("Table is required");
+        }
+
+        if (Dealer is null)
+        {
+            throw new InvalidOperationException("Dealer is required");
+        }
+
+        return new PokerGame(Id, Table, Dealer);
+    }
+
 }

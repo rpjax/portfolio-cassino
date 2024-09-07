@@ -1,74 +1,32 @@
-﻿using Aidan.Core.Patterns;
+﻿using Aidan.Core.Linq;
 
-namespace CassinoDemo.Poker;
+namespace Domain.Poker;
 
 public interface IPokerService
 {
-    /*
-     * Description of business rules
-     * 
-     * 1. The game is played with a standard deck of 52 cards.
-     * 2. The deck is shuffled before the game starts.
-     * 3. The game starts with the player and the dealer each receiving two cards.
-     * 4. The player can see their own cards and one of the dealer's cards.
-     * 5. The player can choose to hit or stand.
-     */
+    /* Query */
 
-    PokerGame StartGame();
-}
+    IAsyncQueryable<PokerGame> GetGames();
 
-public class PokerService : IPokerService
-{
-    public PokerGame StartGame()
-    {
-        return new PokerGame(
-            id: Guid.NewGuid(),
-            table: CreateTable(),
-            dealer: CreateDealer()
-        );
-    }
+    /* Game Lifecycle */
 
-    /*
-     * private helpers
-     */
+    Task<PokerGame> StartGameAsync(PokerRules rules);
 
-    private Table CreateTable()
-    {
-        return Table.Create()
-            .WithDeck(CreateDeck())
-            .Build();
-    }
+    /* Game Mechanics */
 
-    private CardDeck CreateDeck()
-    {
-        var builder = CardDeck.CreateBuilder();
+    Task JoinGameAsync(Guid gameId, Guid playerId, int seat, string playerName, decimal bankroll);
 
-        foreach (var suit in Enum.GetValues<CardSuit>())
-        {
-            foreach (var rank in Enum.GetValues<CardRank>())
-            {
-                builder.AddCard(new Card(suit: suit, rank: rank, orientation: CardOrientation.FaceDown));
-            }
-        }
+    Task QuitGameAsync(Guid gameId, Guid playerId);
 
-        return builder.Build();
-    }
+    Task RebuyAsync(Guid gameId, Guid playerId, decimal amount);
 
-    private Dealer CreateDealer()
-    {
-        return Dealer.Create()
-            .WithRules(CreateRules())
-            .Build();   
-    }
+    Task CheckAsync(Guid gameId, Guid playerId);
 
-    private GameRules CreateRules()
-    {
-        return new GameRules(
-            minPlayers: 2,
-            maxPlayers: 5,
-            smallBlindValue: 5,
-            bigBlindValue: 10,
-            shufflingStrategy: new RandomShufflingStrategy());
-    }
+    Task BetAsync(Guid gameId, Guid playerId, decimal amount);
 
+    Task FoldAsync(Guid gameId, Guid playerId);
+
+    Task CallAsync(Guid gameId, Guid playerId);
+
+    Task RaiseAsync(Guid gameId, Guid playerId, decimal amount);
 }
